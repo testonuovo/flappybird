@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flappy Bird Game</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #87CEEB, #98FB98);
+            font-family: 'Arial', sans-serif;
+        }
+        
+        .game-container {
+            text-align: center;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+        
+        canvas {
+            border: 3px solid #4a90e2;
+            border-radius: 10px;
+            background: linear-gradient(to bottom, #87CEEB 0%, #98FB98 100%);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+        }
+        
+        .score {
+            font-size: 24px;
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        
+        .instructions {
+            margin-top: 15px;
+            color: #34495e;
+            font-size: 16px;
+            line-height: 1.4;
+        }
+        
+        .game-over {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(231, 76, 60, 0.95);
+            color: white;
+            padding: 20px;
+            border-radius: 15px;
+            font-size: 20px;
+            font-weight: bold;
+            text-align: center;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <div class="score">Punteggio: <span id="score">0</span></div>
+        <canvas id="gameCanvas" width="400" height="600"></canvas>
+        <div class="instructions">
+            🐦 Clicca o premi SPAZIO per volare<br>
+            Ogni 5 punti sali di livello! Raggiungi il livello 9!
+        </div>
+        <div class="game-over" id="gameOver">
+            <div>Game Over!</div>
+            <div style="font-size: 16px; margin-top: 10px;">Punteggio finale: <span id="finalScore">0</span></div>
+            <div style="font-size: 14px; margin-top: 15px; cursor: pointer; background: rgba(255,255,255,0.2); padding: 8px 15px; border-radius: 8px;" onclick="restartGame()">Clicca per ricominciare</div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreElement = document.getElementById('score');
+        const gameOverElement = document.getElementById('gameOver');
+        const finalScoreElement = document.getElementById('finalScore');
+
+        // Variabili del gioco
+        let gameRunning = true;
+        let score = 0;
+        
+        // Uccello
+        const bird = {
+            x: 50,
+            y: canvas.height / 2,
+            width: 30,
+            height: 25,
+            velocity: 0,
+            gravity: 0.5,
+            jumpPower: -8
+        };
+        
+        // Tubi
+        const pipes = [];
+        const pipeWidth = 60;
+        const pipeGap = 150;
+        let pipeTimer = 0;
+        
+        // Funzione per creare un nuovo tubo
+        function createPipe() {
+            const minHeight = 50;
+            const maxHeight = canvas.height - pipeGap - minHeight;
+            const topHeight = Math.random() * (maxHeight - minHeight) + minHeight;
+            
+            pipes.push({
+                x: canvas.width,
+                topHeight: topHeight,
+                bottomY: topHeight + pipeGap,
+                bottomHeight: canvas.height - (topHeight + pipeGap),
+                passed: false
+            });
+        }
+        
+        // Funzione per disegnare l'uccello
+        function drawBird() {
+            ctx.fillStyle = '#FFD700';
+            ctx.fillRect(bird.x, bird.y, bird.width, bird.height);
+            
+            // Occhio
+            ctx.fillStyle = '#000';
+            ctx.fillRect(bird.x + 20, bird.y + 5, 4, 4);
+            
+            // Becco
+            ctx.fillStyle = '#FF6347';
+            ctx.fillRect(bird.x + bird.width, bird.y + 10, 8, 4);
+        }
+        
+        // Funzione per disegnare i tubi
+        function drawPipes() {
+            ctx.fillStyle = '#228B22';
+            pipes.forEach(pipe => {
+                // Tubo superiore
+                ctx.fillRect(pipe.x, 0, pipeWidth, pipe.topHeight);
+                // Tubo inferiore
+                ctx.fillRect(pipe.x, pipe.bottomY, pipeWidth, pipe.bottomHeight);
+                
+                // Bordi dei tubi
+                ctx.strokeStyle = '#006400';
+                ctx.lineWidth = 3;
+                ctx.strokeRect(pipe.x, 0, pipeWidth, pipe.topHeight);
+                ctx.strokeRect(pipe.x, pipe.bottomY, pipeWidth, pipe.bottomHeight);
+            });
+        }
+        
+        // Funzione per aggiornare la fisica del gioco
+        function updateGame() {
+            if (!gameRunning) return;
+            
+            // Aggiorna l'uccello
+            bird.velocity += bird.gravity;
+            bird.y += bird.velocity;
+            
+            // Controlla se l'uccello tocca il suolo o il soffitto
+            if (bird.y + bird.height > canvas.height || bird.y < 0) {
+                gameOver();
+                return;
+            }
+            
+            // Crea nuovi tubi
+            pipeTimer++;
+            if (pipeTimer > 90) {
+                createPipe();
+                pipeTimer = 0;
+            }
+            
+            // Aggiorna i tubi
+            for (let i = pipes.length - 1; i >= 0; i--) {
+                const pipe = pipes[i];
+                pipe.x -= 2;
+                
+                // Rimuovi tubi fuori schermo
+                if (pipe.x + pipeWidth < 0) {
+                    pipes.splice(i, 1);
+                    continue;
+                }
+                
+                // Controlla collisioni
+                if (bird.x < pipe.x + pipeWidth &&
+                    bird.x + bird.width > pipe.x &&
+                    (bird.y < pipe.topHeight || bird.y + bird.height > pipe.bottomY)) {
+                    gameOver();
+                    return;
+                }
+                
+                // Aumenta il punteggio
+                if (!pipe.passed && bird.x > pipe.x + pipeWidth) {
+                    pipe.passed = true;
+                    score++;
+                    scoreElement.textContent = score;
+                }
+            }
+        }
+        
+        // Funzione per disegnare tutto
+        function draw() {
+            // Pulisci il canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Disegna lo sfondo con nuvole
+            drawBackground();
+            
+            // Disegna gli elementi del gioco
+            drawPipes();
+            drawBird();
+        }
+        
+        // Funzione per disegnare lo sfondo
+        function drawBackground() {
+            // Nuvole semplici
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+            ctx.beginPath();
+            ctx.arc(100, 100, 30, 0, Math.PI * 2);
+            ctx.arc(120, 100, 40, 0, Math.PI * 2);
+            ctx.arc(140, 100, 30, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.beginPath();
+            ctx.arc(300, 150, 25, 0, Math.PI * 2);
+            ctx.arc(315, 150, 35, 0, Math.PI * 2);
+            ctx.arc(330, 150, 25, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
+        // Funzione per il salto dell'uccello
+        function jump() {
+            if (gameRunning) {
+                bird.velocity = bird.jumpPower;
+            }
+        }
+        
+        // Funzione di game over
+        function gameOver() {
+            gameRunning = false;
+            finalScoreElement.textContent = score;
+            gameOverElement.style.display = 'block';
+        }
+        
+        // Funzione per riavviare il gioco
+        function restartGame() {
+            gameRunning = true;
+            score = 0;
+            bird.y = canvas.height / 2;
+            bird.velocity = 0;
+            pipes.length = 0;
+            pipeTimer = 0;
+            scoreElement.textContent = '0';
+            gameOverElement.style.display = 'none';
+        }
+        
+        // Event listeners
+        canvas.addEventListener('click', jump);
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') {
+                e.preventDefault();
+                jump();
+            }
+        });
+        
+        // Loop principale del gioco
+        function gameLoop() {
+            updateGame();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Inizia il gioco
+        createPipe();
+        gameLoop();
+    </script>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'963d92afc23ff7c6',t:'MTc1MzI5ODgyMy4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
